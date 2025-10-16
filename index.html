@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Walmart Report Uploader</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        select, input[type="text"], textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+        
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .file-upload-area {
+            border: 3px dashed #e0e0e0;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            background: #f8f9fa;
+        }
+        
+        .file-upload-area:hover {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+        
+        .file-upload-area.dragover {
+            border-color: #667eea;
+            background: #e8ebff;
+            transform: scale(1.02);
+        }
+        
+        .file-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .file-list {
+            margin-top: 20px;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            background: #f0f2ff;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .file-item-name {
+            flex: 1;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .file-item-type {
+            padding: 4px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        
+        .remove-btn {
+            background: #ff4757;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        
+        .remove-btn:hover {
+            background: #ff3838;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.processing {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .info-box {
+            background: #e8f4f8;
+            border-left: 4px solid #0984e3;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        
+        .info-box ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .info-box li {
+            margin-bottom: 5px;
+            color: #2d3436;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Walmart Report Uploader</h1>
+        <p class="subtitle">Upload your OTD and VTR reports - we'll handle the rest!</p>
+        
+        <div class="info-box">
+            <strong>📝 How it works:</strong>
+            <ul>
+                <li>Upload both OTD and VTR files together (or separately)</li>
+                <li>Select your store from the dropdown</li>
+                <li>We'll automatically process all tabs and update Airtable</li>
+                <li>You'll get a summary notification in Slack</li>
+            </ul>
+        </div>
+        
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="storeId">Store ID *</label>
+                <select id="storeId" required>
+                    <option value="">Select your store...</option>
+                    <option value="Store-1">Store 1</option>
+                    <option value="Store-2">Store 2</option>
+                    <option value="Store-3">Store 3</option>
+                    <option value="Store-4">Store 4</option>
+                    <option value="Store-5">Store 5</option>
+                    <option value="Store-6">Store 6</option>
+                    <option value="Store-7">Store 7</option>
+                    <option value="Store-8">Store 8</option>
+                    <option value="Store-9">Store 9</option>
+                    <option value="Store-10">Store 10</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="uploaderName">Your Name *</label>
+                <input type="text" id="uploaderName" placeholder="e.g., John Smith" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Upload Files *</label>
+                <div class="file-upload-area" id="dropArea">
+                    <div class="file-icon">📁</div>
+                    <p style="color: #666; margin-bottom: 10px;"><strong>Drag & drop your Excel files here</strong></p>
+                    <p style="color: #999; font-size: 13px;">or click to browse</p>
+                    <p style="color: #999; font-size: 12px; margin-top: 10px;">Supported: OTD_*.xlsx, VTR_*.xlsx</p>
+                    <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls" multiple>
+                </div>
+                <div id="fileList" class="file-list"></div>
+            </div>
+            
+            <div class="form-group">
+                <label for="notes">Notes (Optional)</label>
+                <textarea id="notes" rows="3" placeholder="Any special notes about this upload..."></textarea>
+            </div>
+            
+            <button type="submit" class="submit-btn" id="submitBtn">
+                🚀 Process Reports & Update Airtable
+            </button>
+        </form>
+        
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // IMPORTANT: Replace this with your actual n8n webhook URL
+        const WEBHOOK_URL = 'https://your-n8n-instance.app.n8n.cloud/webhook/walmart-report-upload';
+        
+        let selectedFiles = [];
+        
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const uploadForm = document.getElementById('uploadForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const statusDiv = document.getElementById('status');
+        
+        // Click to upload
+        dropArea.addEventListener('click', () => fileInput.click());
+        
+        // Drag and drop handlers
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.add('dragover');
+            }, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, () => {
+                dropArea.classList.remove('dragover');
+            }, false);
+        });
+        
+        dropArea.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', handleFileSelect, false);
+        
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+        
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            handleFiles(files);
+        }
+        
+        function handleFiles(files) {
+            [...files].forEach(file => {
+                if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                    selectedFiles.push(file);
+                }
+            });
+            updateFileList();
+        }
+        
+        function updateFileList() {
+            fileList.innerHTML = '';
+            selectedFiles.forEach((file, index) => {
+                const fileType = file.name.includes('OTD') ? 'OTD' : 
+                                file.name.includes('VTR') ? 'VTR' : 'Other';
+                
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <span class="file-item-name">📄 ${file.name}</span>
+                    <span class="file-item-type">${fileType}</span>
+                    <button type="button" class="remove-btn" onclick="removeFile(${index})">Remove</button>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+        
+        window.removeFile = function(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+        }
+        
+        function showStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+        
+        function hideStatus() {
+            statusDiv.style.display = 'none';
+        }
+        
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (selectedFiles.length === 0) {
+                showStatus('❌ Please select at least one file to upload', 'error');
+                return;
+            }
+            
+            const storeId = document.getElementById('storeId').value;
+            const uploaderName = document.getElementById('uploaderName').value;
+            const notes = document.getElementById('notes').value;
+            
+            submitBtn.disabled = true;
+            showStatus('⏳ Processing your files... This may take a minute.', 'processing');
+            
+            try {
+                // Convert files to base64
+                const filePromises = selectedFiles.map(file => {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const base64 = reader.result.split(',')[1];
+                            resolve({
+                                name: file.name,
+                                data: base64,
+                                type: file.name.includes('OTD') ? 'OTD' : 
+                                      file.name.includes('VTR') ? 'VTR' : 'Unknown'
+                            });
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                });
+                
+                const filesData = await Promise.all(filePromises);
+                
+                // Send to n8n webhook
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        storeId,
+                        uploaderName,
+                        notes,
+                        files: filesData,
+                        uploadDate: new Date().toISOString()
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Upload failed');
+                }
+                
+                const result = await response.json();
+                
+                showStatus(`✅ Success! Processed ${result.recordsProcessed || 0} records. Check Airtable for details.`, 'success');
+                
+                // Reset form
+                selectedFiles = [];
+                updateFileList();
+                uploadForm.reset();
+                
+            } catch (error) {
+                console.error('Upload error:', error);
+                showStatus(`❌ Upload failed: ${error.message}. Please try again or contact support.`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
