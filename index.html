@@ -369,39 +369,109 @@
             statusDiv.style.display = 'none';
         }
         
-        uploadForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            if (selectedFiles.length === 0) {
-                showStatus('❌ Please select at least one file to upload', 'error');
-                return;
-            }
-            
-            const storeId = document.getElementById('storeId').value;
-            const uploaderName = document.getElementById('uploaderName').value;
-            const notes = document.getElementById('notes').value;
-            
-            submitBtn.disabled = true;
-            showStatus('⏳ Processing your files... This may take a minute.', 'processing');
-            
-            try {
-                // Convert files to base64
-                const filePromises = selectedFiles.map(file => {
-                    return new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const base64 = reader.result.split(',')[1];
-                            resolve({
-                                name: file.name,
-                                data: base64,
-                                type: file.name.includes('OTD') ? 'OTD' : 
-                                      file.name.includes('VTR') ? 'VTR' : 'Unknown'
-                            });
-                        };
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
-                });
+uploadForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    if (selectedFiles.length === 0) {
+        showStatus('❌ Please select at least one file to upload', 'error');
+        return;
+    }
+    
+    const storeId = document.getElementById('storeId').value;
+    const uploaderName = document.getElementById('uploaderName').value;
+    const notes = document.getElementById('notes').value;
+    
+    if (!storeId || !uploaderName) {
+        showStatus('❌ Please fill in all required fields', 'error');
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    showStatus('⏳ Processing your files... This may take a minute.', 'processing');
+    
+    try {
+        // Convert files to base64 - WAIT for all files to complete
+        const filePromises = selectedFiles.map(file => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const base64 = e.target.result.split(',')[1];
+                        
+                        // Detect file type from name
+                        let fileType = 'Unknown';
+                        if (file.name.toUpperCase().includes('OTD')) {
+                            fileType = 'OTD';
+                        } else if (file.name.toUpperCase().includes('VTR')) {
+                            fileType = 'VTR';
+                        } else if (file.name.toUpperCase().includes('REFUND')) {
+                            fileType = 'REFUND';
+                        }
+                        
+                        resolve({
+                            name: file.name,
+                            data: base64,
+                            type: fileType
+                        });
+                    } catch (err) {
+                        reject(new Error('Failed to process file: ' + file.name));
+                    }
+                };
+                
+                reader.onerror = function() {
+                    reject(new Error('Failed to read file: ' + file.name));
+                };
+                
+                reader.readAsDataURL(file);
+            });
+        });
+        
+        // Wait for ALL files to be converted
+        const filesData = await Promise.all(filePromises);
+        
+        console.log('Files converted:', filesData.length);
+        console.log('Sending to webhook:', WEBHOOK_URL);
+        
+        // Send to n8n webhook
+        const response = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                storeId: storeId,
+                uploaderName: uploaderName,
+                notes: notes,
+                files: filesData,
+                uploadDate: new Date().toISOString()
+            })
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error('Upload failed with status: ' + response.status);
+        }
+        
+        const result = await response.json();
+        
+        console.log('Result:', result);
+        
+        showStatus(`✅ Success! Processed ${result.recordsProcessed || filesData.length} records. Check Airtable for details.`, 'success');
+        
+        // Reset form
+        selectedFiles = [];
+        updateFileList();
+        uploadForm.reset();
+        
+    } catch (error) {
+        console.error('Upload error:', error);
+        showStatus(`❌ Upload failed: ${error.message}. Please try again or contact support.`, 'error');
+    } finally {
+        submitBtn.disabled = false;
+    }
+});
                 
                 const filesData = await Promise.all(filePromises);
                 
