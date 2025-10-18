@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -158,7 +157,7 @@
             transition: all 0.3s;
         }
         
-        .submit-btn:hover {
+        .submit-btn:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
         }
@@ -180,18 +179,21 @@
             background: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
+            display: block;
         }
         
         .status.error {
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
+            display: block;
         }
         
         .status.processing {
             background: #fff3cd;
             color: #856404;
             border: 1px solid #ffeaa7;
+            display: block;
         }
         
         .info-box {
@@ -216,15 +218,15 @@
 <body>
     <div class="container">
         <h1>📊 Walmart Report Uploader</h1>
-        <p class="subtitle">Upload your OTD and VTR reports - we'll handle the rest!</p>
+        <p class="subtitle">Upload your OTD, VTR, and REFUND reports - we'll handle the rest!</p>
         
         <div class="info-box">
             <strong>📝 How it works:</strong>
             <ul>
-                <li>Upload both OTD and VTR files together (or separately)</li>
+                <li>Upload OTD, VTR, and REFUND files together (or separately)</li>
                 <li>Select your store from the dropdown</li>
                 <li>We'll automatically process all tabs and update Airtable</li>
-                <li>You'll get a summary notification in Slack</li>
+                <li>You'll get a performance summary in Slack</li>
             </ul>
         </div>
         
@@ -257,7 +259,7 @@
                     <div class="file-icon">📁</div>
                     <p style="color: #666; margin-bottom: 10px;"><strong>Drag & drop your Excel files here</strong></p>
                     <p style="color: #999; font-size: 13px;">or click to browse</p>
-                    <p style="color: #999; font-size: 12px; margin-top: 10px;">Supported: OTD_*.xlsx, VTR_*.xlsx</p>
+                    <p style="color: #999; font-size: 12px; margin-top: 10px;">Supported: OTD_*.xlsx, VTR_*.xlsx, REFUND_*.xlsx</p>
                     <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls" multiple>
                 </div>
                 <div id="fileList" class="file-list"></div>
@@ -330,8 +332,11 @@
         
         function handleFiles(files) {
             [...files].forEach(file => {
+                // Only accept Excel files
                 if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
                     selectedFiles.push(file);
+                } else {
+                    showStatus(`❌ File "${file.name}" is not a supported Excel file`, 'error');
                 }
             });
             updateFileList();
@@ -340,8 +345,16 @@
         function updateFileList() {
             fileList.innerHTML = '';
             selectedFiles.forEach((file, index) => {
-                const fileType = file.name.includes('OTD') ? 'OTD' : 
-                                file.name.includes('VTR') ? 'VTR' : 'Other';
+                // Detect file type from filename
+                let fileType = 'Other';
+                const fileName = file.name.toUpperCase();
+                if (fileName.includes('OTD')) {
+                    fileType = 'OTD';
+                } else if (fileName.includes('VTR')) {
+                    fileType = 'VTR';
+                } else if (fileName.includes('REFUND')) {
+                    fileType = 'REFUND';
+                }
                 
                 const fileItem = document.createElement('div');
                 fileItem.className = 'file-item';
@@ -369,111 +382,100 @@
             statusDiv.style.display = 'none';
         }
         
-uploadForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    if (selectedFiles.length === 0) {
-        showStatus('❌ Please select at least one file to upload', 'error');
-        return;
-    }
-    
-    const storeId = document.getElementById('storeId').value;
-    const uploaderName = document.getElementById('uploaderName').value;
-    const notes = document.getElementById('notes').value;
-    
-    if (!storeId || !uploaderName) {
-        showStatus('❌ Please fill in all required fields', 'error');
-        return;
-    }
-    
-    submitBtn.disabled = true;
-    showStatus('⏳ Processing your files... This may take a minute.', 'processing');
-    
-    try {
-        // Convert files to base64 - WAIT for all files to complete
-        const filePromises = selectedFiles.map(file => {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
+        // Main form submission handler with proper async file reading
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Validate files
+            if (selectedFiles.length === 0) {
+                showStatus('❌ Please select at least one file to upload', 'error');
+                return;
+            }
+            
+            // Get form values
+            const storeId = document.getElementById('storeId').value;
+            const uploaderName = document.getElementById('uploaderName').value;
+            const notes = document.getElementById('notes').value;
+            
+            // Validate required fields
+            if (!storeId || !uploaderName) {
+                showStatus('❌ Please fill in all required fields', 'error');
+                return;
+            }
+            
+            // Disable submit button and show processing status
+            submitBtn.disabled = true;
+            showStatus('⏳ Processing your files... This may take a minute.', 'processing');
+            
+            try {
+                console.log('Starting file conversion...');
                 
-                reader.onload = function(e) {
-                    try {
-                        const base64 = e.target.result.split(',')[1];
+                // Convert ALL files to base64 using Promise.all for proper async handling
+                const filePromises = selectedFiles.map((file, index) => {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
                         
-                        // Detect file type from name
-                        let fileType = 'Unknown';
-                        if (file.name.toUpperCase().includes('OTD')) {
-                            fileType = 'OTD';
-                        } else if (file.name.toUpperCase().includes('VTR')) {
-                            fileType = 'VTR';
-                        } else if (file.name.toUpperCase().includes('REFUND')) {
-                            fileType = 'REFUND';
-                        }
+                        reader.onload = function(event) {
+                            try {
+                                // Extract base64 data (remove the data:*/*;base64, prefix)
+                                const result = event.target.result;
+                                const base64Data = result.split(',')[1];
+                                
+                                if (!base64Data) {
+                                    throw new Error('Failed to extract base64 data from file');
+                                }
+                                
+                                // Detect file type from filename
+                                let fileType = 'Unknown';
+                                const fileName = file.name.toUpperCase();
+                                if (fileName.includes('OTD')) {
+                                    fileType = 'OTD';
+                                } else if (fileName.includes('VTR')) {
+                                    fileType = 'VTR';
+                                } else if (fileName.includes('REFUND')) {
+                                    fileType = 'REFUND';
+                                }
+                                
+                                console.log(`File ${index + 1} converted: ${file.name} (${fileType})`);
+                                
+                                resolve({
+                                    name: file.name,
+                                    type: fileType,
+                                    data: base64Data
+                                });
+                            } catch (err) {
+                                reject(new Error(`Failed to process ${file.name}: ${err.message}`));
+                            }
+                        };
                         
-                        resolve({
-                            name: file.name,
-                            data: base64,
-                            type: fileType
-                        });
-                    } catch (err) {
-                        reject(new Error('Failed to process file: ' + file.name));
-                    }
-                };
+                        reader.onerror = function(error) {
+                            reject(new Error(`Failed to read ${file.name}: ${error}`));
+                        };
+                        
+                        // Start reading the file as Data URL
+                        reader.readAsDataURL(file);
+                    });
+                });
                 
-                reader.onerror = function() {
-                    reject(new Error('Failed to read file: ' + file.name));
-                };
-                
-                reader.readAsDataURL(file);
-            });
-        });
-        
-        // Wait for ALL files to be converted
-        const filesData = await Promise.all(filePromises);
-        
-        console.log('Files converted:', filesData.length);
-        console.log('Sending to webhook:', WEBHOOK_URL);
-        
-        // Send to n8n webhook
-        const response = await fetch(WEBHOOK_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                storeId: storeId,
-                uploaderName: uploaderName,
-                notes: notes,
-                files: filesData,
-                uploadDate: new Date().toISOString()
-            })
-        });
-        
-        console.log('Response status:', response.status);
-        
-        if (!response.ok) {
-            throw new Error('Upload failed with status: ' + response.status);
-        }
-        
-        const result = await response.json();
-        
-        console.log('Result:', result);
-        
-        showStatus(`✅ Success! Processed ${result.recordsProcessed || filesData.length} records. Check Airtable for details.`, 'success');
-        
-        // Reset form
-        selectedFiles = [];
-        updateFileList();
-        uploadForm.reset();
-        
-    } catch (error) {
-        console.error('Upload error:', error);
-        showStatus(`❌ Upload failed: ${error.message}. Please try again or contact support.`, 'error');
-    } finally {
-        submitBtn.disabled = false;
-    }
-});
-                
+                // Wait for ALL files to be converted
                 const filesData = await Promise.all(filePromises);
+                
+                console.log(`Successfully converted ${filesData.length} files`);
+                console.log('Sending to webhook:', WEBHOOK_URL);
+                
+                // Prepare payload
+                const payload = {
+                    storeId: storeId,
+                    uploaderName: uploaderName,
+                    notes: notes,
+                    files: filesData,
+                    uploadDate: new Date().toISOString()
+                };
+                
+                console.log('Payload:', {
+                    ...payload,
+                    files: payload.files.map(f => ({ name: f.name, type: f.type, dataLength: f.data.length }))
+                });
                 
                 // Send to n8n webhook
                 const response = await fetch(WEBHOOK_URL, {
@@ -481,31 +483,53 @@ uploadForm.addEventListener('submit', async (e) => {
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        storeId,
-                        uploaderName,
-                        notes,
-                        files: filesData,
-                        uploadDate: new Date().toISOString()
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+                
                 if (!response.ok) {
-                    throw new Error('Upload failed');
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText);
+                    throw new Error(`Server error (${response.status}): ${errorText || 'Unknown error'}`);
                 }
                 
+                // Parse response
                 const result = await response.json();
+                console.log('Success result:', result);
                 
-                showStatus(`✅ Success! Processed ${result.recordsProcessed || 0} records. Check Airtable for details.`, 'success');
+                // Show success message
+                const recordsProcessed = result.recordsProcessed || result.totalRecords || filesData.length;
+                const matched = result.matched || result.matchedRecords || 0;
+                const outstanding = result.outstanding || result.outstandingRecords || 0;
                 
-                // Reset form
+                let successMessage = `✅ Success! Processed ${recordsProcessed} records.`;
+                if (matched > 0 || outstanding > 0) {
+                    successMessage += ` (${matched} matched, ${outstanding} need review)`;
+                }
+                successMessage += ' Check Airtable for details.';
+                
+                showStatus(successMessage, 'success');
+                
+                // Reset form after successful upload
                 selectedFiles = [];
                 updateFileList();
                 uploadForm.reset();
                 
             } catch (error) {
                 console.error('Upload error:', error);
-                showStatus(`❌ Upload failed: ${error.message}. Please try again or contact support.`, 'error');
+                
+                let errorMessage = error.message || 'Unknown error occurred';
+                
+                // Provide helpful error messages
+                if (errorMessage.includes('Failed to fetch')) {
+                    errorMessage = 'Cannot connect to server. Please check your internet connection or contact support.';
+                } else if (errorMessage.includes('JSON')) {
+                    errorMessage = 'Server returned an invalid response. Please try again or contact support.';
+                }
+                
+                showStatus(`❌ Upload failed: ${errorMessage}`, 'error');
             } finally {
                 submitBtn.disabled = false;
             }
