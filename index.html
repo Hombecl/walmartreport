@@ -54,6 +54,13 @@
             font-size: 14px;
         }
         
+        .label-description {
+            font-weight: 400;
+            color: #666;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        
         select, input[type="text"], textarea {
             width: 100%;
             padding: 12px 15px;
@@ -68,6 +75,43 @@
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .checkbox-group:hover {
+            background: #f0f2ff;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+        }
+        
+        .checkbox-label {
+            flex: 1;
+            cursor: pointer;
+        }
+        
+        .checkbox-label strong {
+            display: block;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .checkbox-label span {
+            color: #666;
+            font-size: 13px;
         }
         
         .file-upload-area {
@@ -265,6 +309,21 @@
                 <div id="fileList" class="file-list"></div>
             </div>
             
+            <!-- NEW: Header Row Configuration -->
+            <div class="form-group">
+                <label>
+                    Header Row Configuration
+                    <div class="label-description">Check this if the FIRST sheet in your Excel file has the header in row 2 instead of row 1</div>
+                </label>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="firstSheetRow2" name="firstSheetRow2">
+                    <label for="firstSheetRow2" class="checkbox-label">
+                        <strong>First sheet uses row 2 as header</strong>
+                        <span>Enable this if the first sheet's actual data starts at row 3 (header is in row 2)</span>
+                    </label>
+                </div>
+            </div>
+            
             <div class="form-group">
                 <label for="notes">Notes (Optional)</label>
                 <textarea id="notes" rows="3" placeholder="Any special notes about this upload..."></textarea>
@@ -382,7 +441,7 @@
             statusDiv.style.display = 'none';
         }
         
-        // Main form submission handler with proper async file reading
+        // Main form submission handler
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -396,6 +455,7 @@
             const storeId = document.getElementById('storeId').value;
             const uploaderName = document.getElementById('uploaderName').value;
             const notes = document.getElementById('notes').value;
+            const firstSheetRow2 = document.getElementById('firstSheetRow2').checked;
             
             // Validate required fields
             if (!storeId || !uploaderName) {
@@ -409,15 +469,15 @@
             
             try {
                 console.log('Starting file conversion...');
+                console.log('First sheet uses row 2 header:', firstSheetRow2);
                 
-                // Convert ALL files to base64 using Promise.all for proper async handling
+                // Convert ALL files to base64
                 const filePromises = selectedFiles.map((file, index) => {
                     return new Promise((resolve, reject) => {
                         const reader = new FileReader();
                         
                         reader.onload = function(event) {
                             try {
-                                // Extract base64 data (remove the data:*/*;base64, prefix)
                                 const result = event.target.result;
                                 const base64Data = result.split(',')[1];
                                 
@@ -452,7 +512,6 @@
                             reject(new Error(`Failed to read ${file.name}: ${error}`));
                         };
                         
-                        // Start reading the file as Data URL
                         reader.readAsDataURL(file);
                     });
                 });
@@ -461,13 +520,13 @@
                 const filesData = await Promise.all(filePromises);
                 
                 console.log(`Successfully converted ${filesData.length} files`);
-                console.log('Sending to webhook:', WEBHOOK_URL);
                 
-                // Prepare payload
+                // Prepare payload with header row configuration
                 const payload = {
                     storeId: storeId,
                     uploaderName: uploaderName,
                     notes: notes,
+                    firstSheetRow2: firstSheetRow2, // ⭐ NEW: Header row config
                     files: filesData,
                     uploadDate: new Date().toISOString()
                 };
@@ -487,7 +546,6 @@
                 });
                 
                 console.log('Response status:', response.status);
-                console.log('Response headers:', [...response.headers.entries()]);
                 
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -495,7 +553,6 @@
                     throw new Error(`Server error (${response.status}): ${errorText || 'Unknown error'}`);
                 }
                 
-                // Parse response
                 const result = await response.json();
                 console.log('Success result:', result);
                 
@@ -512,7 +569,7 @@
                 
                 showStatus(successMessage, 'success');
                 
-                // Reset form after successful upload
+                // Reset form
                 selectedFiles = [];
                 updateFileList();
                 uploadForm.reset();
@@ -522,7 +579,6 @@
                 
                 let errorMessage = error.message || 'Unknown error occurred';
                 
-                // Provide helpful error messages
                 if (errorMessage.includes('Failed to fetch')) {
                     errorMessage = 'Cannot connect to server. Please check your internet connection or contact support.';
                 } else if (errorMessage.includes('JSON')) {
