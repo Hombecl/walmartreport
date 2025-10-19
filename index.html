@@ -59,6 +59,7 @@
             color: #666;
             font-size: 13px;
             margin-top: 4px;
+            line-height: 1.4;
         }
         
         select, input[type="text"], textarea {
@@ -75,43 +76,6 @@
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .checkbox-group:hover {
-            background: #f0f2ff;
-        }
-        
-        .checkbox-group input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            margin-right: 12px;
-            cursor: pointer;
-        }
-        
-        .checkbox-label {
-            flex: 1;
-            cursor: pointer;
-        }
-        
-        .checkbox-label strong {
-            display: block;
-            color: #333;
-            margin-bottom: 4px;
-        }
-        
-        .checkbox-label span {
-            color: #666;
-            font-size: 13px;
         }
         
         .file-upload-area {
@@ -309,19 +273,34 @@
                 <div id="fileList" class="file-list"></div>
             </div>
             
-            <!-- NEW: Header Row Configuration -->
+            <!-- NEW: Sheet Selection for Row 2 Header -->
             <div class="form-group">
-                <label>
+                <label for="sheetWithRow2Header">
                     Header Row Configuration
-                    <div class="label-description">Check this if the FIRST sheet in your Excel file has the header in row 2 instead of row 1</div>
+                    <div class="label-description">Select which sheet (if any) uses row 2 as the header row. Leave as "None" if all sheets use row 1 as header.</div>
                 </label>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="firstSheetRow2" name="firstSheetRow2">
-                    <label for="firstSheetRow2" class="checkbox-label">
-                        <strong>First sheet uses row 2 as header</strong>
-                        <span>Enable this if the first sheet's actual data starts at row 3 (header is in row 2)</span>
-                    </label>
-                </div>
+                <select id="sheetWithRow2Header">
+                    <option value="">None (all sheets use row 1 as header)</option>
+                    <optgroup label="OTD Report Sheets">
+                        <option value="Late handover to carrier">Late handover to carrier</option>
+                        <option value="Late Shipment">Late Shipment</option>
+                        <option value="No carrier scan">No carrier scan</option>
+                        <option value="Carrier EDD later than promised">Carrier EDD later than promised</option>
+                        <option value="Carrier Delays">Carrier Delays</option>
+                        <option value="Not Accountable">Not Accountable</option>
+                    </optgroup>
+                    <optgroup label="VTR Report Sheets">
+                        <option value="Misleading tracking">Misleading tracking</option>
+                        <option value="Valid">Valid</option>
+                        <option value="Not Reported">Not Reported</option>
+                    </optgroup>
+                    <optgroup label="REFUND Report Sheets">
+                        <option value="Defective">Defective</option>
+                        <option value="Incorrect item">Incorrect item</option>
+                        <option value="Lost">Lost</option>
+                        <option value="No Refund">No Refund</option>
+                    </optgroup>
+                </select>
             </div>
             
             <div class="form-group">
@@ -391,7 +370,6 @@
         
         function handleFiles(files) {
             [...files].forEach(file => {
-                // Only accept Excel files
                 if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
                     selectedFiles.push(file);
                 } else {
@@ -404,7 +382,6 @@
         function updateFileList() {
             fileList.innerHTML = '';
             selectedFiles.forEach((file, index) => {
-                // Detect file type from filename
                 let fileType = 'Other';
                 const fileName = file.name.toUpperCase();
                 if (fileName.includes('OTD')) {
@@ -437,42 +414,32 @@
             statusDiv.style.display = 'block';
         }
         
-        function hideStatus() {
-            statusDiv.style.display = 'none';
-        }
-        
-        // Main form submission handler
+        // Main form submission
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            // Validate files
             if (selectedFiles.length === 0) {
                 showStatus('❌ Please select at least one file to upload', 'error');
                 return;
             }
             
-            // Get form values
             const storeId = document.getElementById('storeId').value;
             const uploaderName = document.getElementById('uploaderName').value;
             const notes = document.getElementById('notes').value;
-            const firstSheetRow2 = document.getElementById('firstSheetRow2').checked;
+            const sheetWithRow2Header = document.getElementById('sheetWithRow2Header').value; // ⭐ NEW
             
-            // Validate required fields
             if (!storeId || !uploaderName) {
                 showStatus('❌ Please fill in all required fields', 'error');
                 return;
             }
             
-            // Disable submit button and show processing status
             submitBtn.disabled = true;
             showStatus('⏳ Processing your files... This may take a minute.', 'processing');
             
             try {
-                console.log('Starting file conversion...');
-                console.log('First sheet uses row 2 header:', firstSheetRow2);
+                console.log('Sheet with row 2 header:', sheetWithRow2Header || 'None');
                 
-                // Convert ALL files to base64
-                const filePromises = selectedFiles.map((file, index) => {
+                const filePromises = selectedFiles.map((file) => {
                     return new Promise((resolve, reject) => {
                         const reader = new FileReader();
                         
@@ -482,10 +449,9 @@
                                 const base64Data = result.split(',')[1];
                                 
                                 if (!base64Data) {
-                                    throw new Error('Failed to extract base64 data from file');
+                                    throw new Error('Failed to extract base64 data');
                                 }
                                 
-                                // Detect file type from filename
                                 let fileType = 'Unknown';
                                 const fileName = file.name.toUpperCase();
                                 if (fileName.includes('OTD')) {
@@ -495,8 +461,6 @@
                                 } else if (fileName.includes('REFUND')) {
                                     fileType = 'REFUND';
                                 }
-                                
-                                console.log(`File ${index + 1} converted: ${file.name} (${fileType})`);
                                 
                                 resolve({
                                     name: file.name,
@@ -508,84 +472,55 @@
                             }
                         };
                         
-                        reader.onerror = function(error) {
-                            reject(new Error(`Failed to read ${file.name}: ${error}`));
-                        };
-                        
+                        reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
                         reader.readAsDataURL(file);
                     });
                 });
                 
-                // Wait for ALL files to be converted
                 const filesData = await Promise.all(filePromises);
                 
-                console.log(`Successfully converted ${filesData.length} files`);
-                
-                // Prepare payload with header row configuration
                 const payload = {
                     storeId: storeId,
                     uploaderName: uploaderName,
                     notes: notes,
-                    firstSheetRow2: firstSheetRow2, // ⭐ NEW: Header row config
+                    sheetWithRow2Header: sheetWithRow2Header || null, // ⭐ NEW: Specific sheet name
                     files: filesData,
                     uploadDate: new Date().toISOString()
                 };
                 
-                console.log('Payload:', {
-                    ...payload,
-                    files: payload.files.map(f => ({ name: f.name, type: f.type, dataLength: f.data.length }))
-                });
+                console.log('Sending payload with sheet config:', payload.sheetWithRow2Header);
                 
-                // Send to n8n webhook
                 const response = await fetch(WEBHOOK_URL, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
                 
-                console.log('Response status:', response.status);
-                
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('Error response:', errorText);
-                    throw new Error(`Server error (${response.status}): ${errorText || 'Unknown error'}`);
+                    throw new Error(`Server error (${response.status}): ${errorText}`);
                 }
                 
                 const result = await response.json();
-                console.log('Success result:', result);
                 
-                // Show success message
-                const recordsProcessed = result.recordsProcessed || result.totalRecords || filesData.length;
-                const matched = result.matched || result.matchedRecords || 0;
-                const outstanding = result.outstanding || result.outstandingRecords || 0;
+                const recordsProcessed = result.recordsProcessed || filesData.length;
+                const matched = result.matched || 0;
+                const outstanding = result.outstanding || 0;
                 
                 let successMessage = `✅ Success! Processed ${recordsProcessed} records.`;
                 if (matched > 0 || outstanding > 0) {
                     successMessage += ` (${matched} matched, ${outstanding} need review)`;
                 }
-                successMessage += ' Check Airtable for details.';
                 
                 showStatus(successMessage, 'success');
                 
-                // Reset form
                 selectedFiles = [];
                 updateFileList();
                 uploadForm.reset();
                 
             } catch (error) {
                 console.error('Upload error:', error);
-                
-                let errorMessage = error.message || 'Unknown error occurred';
-                
-                if (errorMessage.includes('Failed to fetch')) {
-                    errorMessage = 'Cannot connect to server. Please check your internet connection or contact support.';
-                } else if (errorMessage.includes('JSON')) {
-                    errorMessage = 'Server returned an invalid response. Please try again or contact support.';
-                }
-                
-                showStatus(`❌ Upload failed: ${errorMessage}`, 'error');
+                showStatus(`❌ Upload failed: ${error.message}`, 'error');
             } finally {
                 submitBtn.disabled = false;
             }
