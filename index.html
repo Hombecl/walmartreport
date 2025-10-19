@@ -273,32 +273,33 @@
                 <div id="fileList" class="file-list"></div>
             </div>
             
-            <!-- NEW: Sheet Selection for Row 2 Header -->
             <div class="form-group">
                 <label for="sheetWithRow2Header">
                     Header Row Configuration
-                    <div class="label-description">Select which sheet (if any) uses row 2 as the header row. Leave as "None" if all sheets use row 1 as header.</div>
+                    <div class="label-description">Select which sheet (if any) uses row 2 as the header row. The sheet name includes the report type to avoid confusion (e.g., "No carrier scan" exists in both OTD and VTR).</div>
                 </label>
                 <select id="sheetWithRow2Header">
                     <option value="">None (all sheets use row 1 as header)</option>
-                    <optgroup label="OTD Report Sheets">
-                        <option value="Late handover to carrier">Late handover to carrier</option>
-                        <option value="Late Shipment">Late Shipment</option>
-                        <option value="No carrier scan">No carrier scan</option>
-                        <option value="Carrier EDD later than promised">Carrier EDD later than promised</option>
-                        <option value="Carrier Delays">Carrier Delays</option>
-                        <option value="Not Accountable">Not Accountable</option>
+                    <optgroup label="📊 OTD Report Sheets">
+                        <option value="OTD|Late handover to carrier">Late handover to carrier</option>
+                        <option value="OTD|Late Shipment">Late Shipment</option>
+                        <option value="OTD|No carrier scan">No carrier scan (OTD)</option>
+                        <option value="OTD|Carrier EDD later than promised">Carrier EDD later than promised</option>
+                        <option value="OTD|Carrier Delays">Carrier Delays</option>
+                        <option value="OTD|Not Accountable">Not Accountable (OTD)</option>
                     </optgroup>
-                    <optgroup label="VTR Report Sheets">
-                        <option value="Misleading tracking">Misleading tracking</option>
-                        <option value="Valid">Valid</option>
-                        <option value="Not Reported">Not Reported</option>
+                    <optgroup label="📦 VTR Report Sheets">
+                        <option value="VTR|No carrier scan">No carrier scan (VTR)</option>
+                        <option value="VTR|Misleading tracking">Misleading tracking</option>
+                        <option value="VTR|Valid">Valid</option>
+                        <option value="VTR|Not Reported">Not Reported</option>
                     </optgroup>
-                    <optgroup label="REFUND Report Sheets">
-                        <option value="Defective">Defective</option>
-                        <option value="Incorrect item">Incorrect item</option>
-                        <option value="Lost">Lost</option>
-                        <option value="No Refund">No Refund</option>
+                    <optgroup label="💰 REFUND Report Sheets">
+                        <option value="REFUND|Defective">Defective</option>
+                        <option value="REFUND|Incorrect item">Incorrect item</option>
+                        <option value="REFUND|Lost">Lost</option>
+                        <option value="REFUND|Not Accountable">Not Accountable (REFUND)</option>
+                        <option value="REFUND|No Refund">No Refund</option>
                     </optgroup>
                 </select>
             </div>
@@ -426,7 +427,19 @@
             const storeId = document.getElementById('storeId').value;
             const uploaderName = document.getElementById('uploaderName').value;
             const notes = document.getElementById('notes').value;
-            const sheetWithRow2Header = document.getElementById('sheetWithRow2Header').value; // ⭐ NEW
+            const sheetWithRow2HeaderValue = document.getElementById('sheetWithRow2Header').value;
+            
+            // Parse the format "REPORT_TYPE|SHEET_NAME"
+            let sheetWithRow2Header = null;
+            let sheetReportType = null;
+            
+            if (sheetWithRow2HeaderValue) {
+                const parts = sheetWithRow2HeaderValue.split('|');
+                if (parts.length === 2) {
+                    sheetReportType = parts[0];  // e.g., "OTD"
+                    sheetWithRow2Header = parts[1];  // e.g., "No carrier scan"
+                }
+            }
             
             if (!storeId || !uploaderName) {
                 showStatus('❌ Please fill in all required fields', 'error');
@@ -437,7 +450,7 @@
             showStatus('⏳ Processing your files... This may take a minute.', 'processing');
             
             try {
-                console.log('Sheet with row 2 header:', sheetWithRow2Header || 'None');
+                console.log('Sheet with row 2 header:', sheetWithRow2Header, 'Report type:', sheetReportType);
                 
                 const filePromises = selectedFiles.map((file) => {
                     return new Promise((resolve, reject) => {
@@ -483,12 +496,16 @@
                     storeId: storeId,
                     uploaderName: uploaderName,
                     notes: notes,
-                    sheetWithRow2Header: sheetWithRow2Header || null, // ⭐ NEW: Specific sheet name
+                    sheetWithRow2Header: sheetWithRow2Header,
+                    sheetReportType: sheetReportType,
                     files: filesData,
                     uploadDate: new Date().toISOString()
                 };
                 
-                console.log('Sending payload with sheet config:', payload.sheetWithRow2Header);
+                console.log('Sending payload:', {
+                    ...payload,
+                    files: payload.files.map(f => ({ name: f.name, type: f.type, dataLength: f.data.length }))
+                });
                 
                 const response = await fetch(WEBHOOK_URL, {
                     method: 'POST',
@@ -498,10 +515,12 @@
                 
                 if (!response.ok) {
                     const errorText = await response.text();
+                    console.error('Error response:', errorText);
                     throw new Error(`Server error (${response.status}): ${errorText}`);
                 }
                 
                 const result = await response.json();
+                console.log('Success result:', result);
                 
                 const recordsProcessed = result.recordsProcessed || filesData.length;
                 const matched = result.matched || 0;
@@ -511,6 +530,7 @@
                 if (matched > 0 || outstanding > 0) {
                     successMessage += ` (${matched} matched, ${outstanding} need review)`;
                 }
+                successMessage += ' Check Airtable for details.';
                 
                 showStatus(successMessage, 'success');
                 
@@ -520,7 +540,16 @@
                 
             } catch (error) {
                 console.error('Upload error:', error);
-                showStatus(`❌ Upload failed: ${error.message}`, 'error');
+                
+                let errorMessage = error.message || 'Unknown error occurred';
+                
+                if (errorMessage.includes('Failed to fetch')) {
+                    errorMessage = 'Cannot connect to server. Please check your internet connection or contact support.';
+                } else if (errorMessage.includes('JSON')) {
+                    errorMessage = 'Server returned an invalid response. Please try again or contact support.';
+                }
+                
+                showStatus(`❌ Upload failed: ${errorMessage}`, 'error');
             } finally {
                 submitBtn.disabled = false;
             }
